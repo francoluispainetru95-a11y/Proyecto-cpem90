@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Reconocimiento de Flora Nativa - Villa Pehuenia</title>
+  
+  <!-- Carga de librerías TensorFlow.js y Teachable Machine -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #121814;
+      color: #e2ebd8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    h1 { font-size: 1.4rem; color: #81c784; margin-bottom: 4px; }
+    p { font-size: 0.85rem; color: #a3b899; }
+
+    #webcam-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      aspect-ratio: 1 / 1;
+      background: #1e2620;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 2px solid #388e3c;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover;
+    }
+
+    .btn-main {
+      margin-top: 16px;
+      background-color: #2e7d32;
+      color: #ffffff;
+      border: none;
+      padding: 14px 28px;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(46, 125, 50, 0.4);
+      transition: background 0.2s;
+    }
+    .btn-main:active { background-color: #1b5e20; }
+
+    #label-container {
+      width: 100%;
+      max-width: 360px;
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .prediction-card {
+      background: #1e2620;
+      padding: 10px 14px;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border: 1px solid #2d3b30;
+    }
+
+    .prediction-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background-color: #2d3b30;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background-color: #66bb6a;
+      width: 0%;
+      transition: width 0.15s ease-out;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Flora Nativa Pehuenia</h1>
+    <p>Identificador con Inteligencia Artificial</p>
+  </header>
+
+  <div id="webcam-wrapper">
+    <span id="placeholder-text" style="color: #78909c; text-align: center; padding: 10px;">
+      Presioná el botón para encender la cámara
+    </span>
+  </div>
+
+  <button class="btn-main" id="btn-start" onclick="init()">Iniciar Cámara</button>
+
+  <div id="label-container"></div>
+
+  <script>
+    // ------------------------------------------------------------------------
+    // 1. PEGA AQUÍ LA URL DE TU MODELO DE TEACHABLE MACHINE
+    // Debe terminar obligatoriamente con la barra "/"
+    // ------------------------------------------------------------------------
+    const URL = https://teachablemachine.withgoogle.com/models/-uzpS_rX1/
+
+    let model, webcam, labelContainer, maxPredictions;
+
+    async function init() {
+      document.getElementById("btn-start").style.display = "none";
+      document.getElementById("placeholder-text").innerText = "Cargando modelo y cámara...";
+
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
+
+      try {
+        // Cargar el modelo entrenado
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+
+        // Configurar la webcam
+        const flip = false; // Sin espejo para usar cámara trasera
+        webcam = new tmImage.Webcam(360, 360, flip);
+        
+        // Solicitar la cámara trasera (facingMode: environment)
+        await webcam.setup({ facingMode: "environment" }); 
+        await webcam.play();
+        
+        window.requestAnimationFrame(loop);
+
+        // Reemplazar placeholder por el canvas del video
+        const wrapper = document.getElementById("webcam-wrapper");
+        wrapper.innerHTML = "";
+        wrapper.appendChild(webcam.canvas);
+
+        // Crear la estructura HTML para las barras de progreso
+        labelContainer = document.getElementById("label-container");
+        labelContainer.innerHTML = "";
+        for (let i = 0; i < maxPredictions; i++) {
+          const card = document.createElement("div");
+          card.className = "prediction-card";
+          card.innerHTML = `
+            <div class="prediction-header">
+              <span id="class-name-${i}">-</span>
+              <span id="class-prob-${i}">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div id="fill-${i}" class="progress-bar-fill"></div>
+            </div>
+          `;
+          labelContainer.appendChild(card);
+        }
+      } catch (error) {
+        alert("Error al acceder a la cámara o cargar el modelo. Verificá los permisos o la URL del modelo.");
+        console.error(error);
+      }
+    }
+
+    async function loop() {
+      webcam.update();
+      await predict();
+      window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+      const prediction = await model.predict(webcam.canvas);
+      
+      for (let i = 0; i < maxPredictions; i++) {
+        const className = prediction[i].className;
+        const probability = (prediction[i].probability * 100).toFixed(0);
+
+        document.getElementById(`class-name-${i}`).innerText = className;
+        document.getElementById(`class-prob-${i}`).innerText = `${probability}%`;
+        
+        const fillBar = document.getElementById(`fill-${i}`);
+        fillBar.style.width = `${probability}%`;
+        
+        // Cambiar color de la barra si supera el 70% de certeza
+        if (probability > 70) {
+          fillBar.style.backgroundColor = "#81c784";
+        } else {
+          fillBar.style.backgroundColor = "#4caf50";
+        }
+      }
+    }
+  </script>
+</body>
+</html>
