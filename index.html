@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Reconocimiento de Flora Nativa - Villa Pehuenia</title>
+  <title>Flora Nativa Pehuenia</title>
 
-  <!-- Librerías TensorFlow.js y Teachable Machine -->
+  <!-- TensorFlow.js y Teachable Machine Library -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
@@ -22,14 +22,14 @@
       padding: 16px;
     }
 
-    header { text-align: center; margin-bottom: 16px; }
-    h1 { font-size: 1.4rem; color: #81c784; margin-bottom: 4px; }
+    header { text-align: center; margin-bottom: 12px; }
+    h1 { font-size: 1.4rem; color: #81c784; margin-bottom: 2px; }
     p { font-size: 0.85rem; color: #a3b899; }
 
-    #media-wrapper {
+    #view-wrapper {
       position: relative;
       width: 100%;
-      max-width: 360px;
+      max-width: 340px;
       aspect-ratio: 1 / 1;
       background: #1e2620;
       border-radius: 16px;
@@ -38,69 +38,66 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.5);
     }
 
-    canvas, img#preview-img {
+    /* Regla CSS clave para evitar la pantalla negra en móviles */
+    #video-feed, #image-preview {
       width: 100% !important;
       height: 100% !important;
       object-fit: cover;
+      display: block;
     }
 
-    .btn-group {
+    .btn-container {
       display: flex;
       flex-direction: column;
       gap: 10px;
       width: 100%;
-      max-width: 360px;
-      margin-top: 16px;
+      max-width: 340px;
+      margin-top: 14px;
     }
 
     .btn {
       background-color: #2e7d32;
       color: #ffffff;
       border: none;
-      padding: 12px 20px;
+      padding: 14px;
       font-size: 0.95rem;
       font-weight: bold;
       border-radius: 30px;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
-      transition: background 0.2s;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(46, 125, 50, 0.3);
     }
-    .btn:active { background-color: #1b5e20; }
-    .btn-secondary {
-      background-color: #37474f;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
+    .btn-secondary { background-color: #37474f; box-shadow: none; }
+    .btn:active { opacity: 0.85; }
 
     #label-container {
       width: 100%;
-      max-width: 360px;
-      margin-top: 20px;
+      max-width: 340px;
+      margin-top: 16px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
     .prediction-card {
       background: #1e2620;
-      padding: 10px 14px;
-      border-radius: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
+      padding: 10px 12px;
+      border-radius: 8px;
       border: 1px solid #2d3b30;
     }
 
     .prediction-header {
       display: flex;
       justify-content: space-between;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       font-weight: 600;
+      margin-bottom: 6px;
     }
 
-    .progress-bar-bg {
+    .progress-bg {
       width: 100%;
       height: 8px;
       background-color: #2d3b30;
@@ -108,7 +105,7 @@
       overflow: hidden;
     }
 
-    .progress-bar-fill {
+    .progress-fill {
       height: 100%;
       background-color: #66bb6a;
       width: 0%;
@@ -123,140 +120,164 @@
     <p>Identificador con Inteligencia Artificial</p>
   </header>
 
-  <div id="media-wrapper">
-    <span id="placeholder-text" style="color: #78909c; text-align: center; padding: 12px;">
-      Seleccioná una opción para iniciar
+  <div id="view-wrapper">
+    <span id="placeholder" style="color: #78909c; padding: 12px; text-align: center;">
+      Tocá un botón para encender
     </span>
-    <img id="preview-img" style="display: none;" alt="Vista previa de planta">
+    <video id="video-feed" autoplay playsinline style="display:none;"></video>
+    <img id="image-preview" style="display:none;" alt="Planta capturada">
   </div>
 
-  <div class="btn-group">
-    <button class="btn" id="btn-webcam" onclick="startWebcam()">Iniciar Cámara en Vivo</button>
-    
-    <!-- Botón alternativo que dispara el selector o cámara nativa -->
-    <button class="btn btn-secondary" onclick="document.getElementById('image-upload').click()">
-      Tomar Foto / Cargar Imagen
-    </button>
-    <input type="file" id="image-upload" accept="image/*" capture="environment" style="display:none;" onchange="handleImage(this.files)">
+  <div class="btn-container">
+    <button class="btn" onclick="initLiveCamera()">Iniciar Cámara en Vivo</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('file-input').click()">Tomar Foto / Cargar Imagen</button>
+    <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none;" onchange="processFastImage(this.files)">
   </div>
 
   <div id="label-container"></div>
 
+  <!-- Canvas auxiliar para acelerar la clasificación de fotos -->
+  <canvas id="compressor-canvas" width="224" height="224" style="display:none;"></canvas>
+
   <script>
     // ------------------------------------------------------------------------
-    // REEMPLAZÁ ESTA URL CON EL ENLACE DE TU MODELO DE TEACHABLE MACHINE
+    // VERIFICÁ QUE TU URL DE TEACHABLE MACHINE TERMINE EN DIAGONAL "/"
     // ------------------------------------------------------------------------
-    const URL = "https://teachablemachine.withgoogle.com/models/-uzpS_rX1/";
+    const URL_MODELO = "https://teachablemachine.withgoogle.com/models/-uzpS_rX1/";
 
-    let model, webcam, labelContainer, maxPredictions;
-    let isWebcamRunning = false;
+    let model, maxPredictions;
+    let videoElement = document.getElementById("video-feed");
+    let imgElement = document.getElementById("image-preview");
+    let placeholder = document.getElementById("placeholder");
+    let isLive = false;
 
-    // Carga inicial del modelo
-    async function loadModel() {
+    async function getModel() {
       if (!model) {
-        document.getElementById("placeholder-text").innerText = "Cargando modelo de IA...";
-        const modelURL = URL + "model.json";
-        const metadataURL = URL + "metadata.json";
-        model = await tmImage.load(modelURL, metadataURL);
-        maxPredictions = model.getTotalClasses();
-        setupLabelContainer();
-      }
-    }
-
-    function setupLabelContainer() {
-      labelContainer = document.getElementById("label-container");
-      labelContainer.innerHTML = "";
-      for (let i = 0; i < maxPredictions; i++) {
-        const card = document.createElement("div");
-        card.className = "prediction-card";
-        card.innerHTML = `
-          <div class="prediction-header">
-            <span id="class-name-${i}">-</span>
-            <span id="class-prob-${i}">0%</span>
-          </div>
-          <div class="progress-bar-bg">
-            <div id="fill-${i}" class="progress-bar-fill"></div>
-          </div>
-        `;
-        labelContainer.appendChild(card);
-      }
-    }
-
-    // Opcion 1: Transmision en vivo
-    async function startWebcam() {
-      try {
-        await loadModel();
-        document.getElementById("placeholder-text").innerText = "Abriendo cámara...";
+        placeholder.innerText = "Cargando modelo IA...";
+        placeholder.style.display = "block";
         
-        const flip = false;
-        webcam = new tmImage.Webcam(360, 360, flip);
-
-        // Intenta camara trasera; si el navegador la rechaza, usa la camara por defecto
-        try {
-          await webcam.setup({ facingMode: { exact: "environment" } });
-        } catch (e) {
-          console.warn("No se pudo forzar facingMode exacto, usando camara por defecto.", e);
-          await webcam.setup({ facingMode: "user" });
+        if (URL_MODELO.includes("TU_MODELO_AQUI")) {
+          alert("Recordá pegar la URL de tu modelo de Teachable Machine en el código.");
+          placeholder.innerText = "Error: Falta URL del modelo";
+          return false;
         }
 
-        await webcam.play();
-        isWebcamRunning = true;
+        try {
+          const fullURL = URL_MODELO.endsWith("/") ? URL_MODELO : URL_MODELO + "/";
+          model = await tmImage.load(fullURL + "model.json", fullURL + "metadata.json");
+          maxPredictions = model.getTotalClasses();
+          buildUI();
+          return true;
+        } catch (e) {
+          console.error(e);
+          alert("Error al descargar el modelo. Verificá la URL o la conexión.");
+          placeholder.innerText = "Error de conexión";
+          return false;
+        }
+      }
+      return true;
+    }
 
-        const wrapper = document.getElementById("media-wrapper");
-        wrapper.innerHTML = "";
-        wrapper.appendChild(webcam.canvas);
-        document.getElementById("btn-webcam").style.display = "none";
-
-        window.requestAnimationFrame(loop);
-      } catch (error) {
-        alert("No se pudo acceder a la cámara en vivo. Usá el botón 'Tomar Foto / Cargar Imagen'.");
-        console.error(error);
+    function buildUI() {
+      const container = document.getElementById("label-container");
+      container.innerHTML = "";
+      for (let i = 0; i < maxPredictions; i++) {
+        container.innerHTML += `
+          <div class="prediction-card">
+            <div class="prediction-header">
+              <span id="name-${i}">Clase ${i+1}</span>
+              <span id="prob-${i}">0%</span>
+            </div>
+            <div class="progress-bg">
+              <div id="fill-${i}" class="progress-fill"></div>
+            </div>
+          </div>`;
       }
     }
 
-    async function loop() {
-      if (isWebcamRunning) {
-        webcam.update();
-        await predict(webcam.canvas);
-        window.requestAnimationFrame(loop);
+    // CÁMARA EN VIVO
+    async function initLiveCamera() {
+      const loaded = await getModel();
+      if (!loaded) return;
+
+      try {
+        isLive = false;
+        
+        // Solicitar el stream de video
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 640 } },
+          audio: false
+        });
+
+        videoElement.srcObject = stream;
+        imgElement.style.display = "none";
+        placeholder.style.display = "none";
+        videoElement.style.display = "block";
+
+        // Forzar reproducción del elemento video en móviles
+        await videoElement.play();
+
+        isLive = true;
+        requestAnimationFrame(predictLoop);
+      } catch (err) {
+        alert("No se pudo iniciar la cámara en vivo. Usá la opción 'Tomar Foto / Cargar Imagen'.");
+        console.error(err);
       }
     }
 
-    // Opción 2: Foto tomada o imagen subida desde galería
-    async function handleImage(files) {
-      if (files.length === 0) return;
-      
-      isWebcamRunning = false;
-      if (webcam) { webcam.stop(); }
+    async function predictLoop() {
+      if (isLive && videoElement.readyState === 4) {
+        const predictions = await model.predict(videoElement);
+        updateResults(predictions);
+        requestAnimationFrame(predictLoop);
+      } else if (isLive) {
+        requestAnimationFrame(predictLoop);
+      }
+    }
 
-      await loadModel();
+    // FOTO INSTANTÁNEA
+    async function processFastImage(files) {
+      if (!files || files.length === 0) return;
 
-      const wrapper = document.getElementById("media-wrapper");
-      wrapper.innerHTML = "";
-      
-      const imgElement = document.createElement("img");
-      imgElement.id = "preview-img";
-      imgElement.src = URL.createObjectURL(files[0]);
-      wrapper.appendChild(imgElement);
+      const loaded = await getModel();
+      if (!loaded) return;
 
-      imgElement.onload = async () => {
-        await predict(imgElement);
+      isLive = false;
+      if (videoElement.srcObject) {
+        videoElement.srcObject.getTracks().forEach(track => track.stop());
+      }
+
+      placeholder.innerText = "Procesando foto...";
+      placeholder.style.display = "block";
+
+      const file = files[0];
+      const tempImg = new Image();
+      tempImg.src = URL.createObjectURL(file);
+
+      tempImg.onload = async () => {
+        const canvas = document.getElementById("compressor-canvas");
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(tempImg, 0, 0, 224, 224);
+
+        imgElement.src = canvas.toDataURL("image/jpeg", 0.85);
+        imgElement.style.display = "block";
+        videoElement.style.display = "none";
+        placeholder.style.display = "none";
+
+        const predictions = await model.predict(canvas);
+        updateResults(predictions);
       };
     }
 
-    // Ejecuta la clasificación sobre el canvas o la imagen fija
-    async function predict(imageSource) {
-      const prediction = await model.predict(imageSource);
+    function updateResults(predictions) {
       for (let i = 0; i < maxPredictions; i++) {
-        const className = prediction[i].className;
-        const probability = (prediction[i].probability * 100).toFixed(0);
+        const pct = (predictions[i].probability * 100).toFixed(0);
+        document.getElementById(`name-${i}`).innerText = predictions[i].className;
+        document.getElementById(`prob-${i}`).innerText = pct + "%";
 
-        document.getElementById(`class-name-${i}`).innerText = className;
-        document.getElementById(`class-prob-${i}`).innerText = `${probability}%`;
-
-        const fillBar = document.getElementById(`fill-${i}`);
-        fillBar.style.width = `${probability}%`;
-        fillBar.style.backgroundColor = probability > 70 ? "#81c784" : "#4caf50";
+        const bar = document.getElementById(`fill-${i}`);
+        bar.style.width = pct + "%";
+        bar.style.backgroundColor = pct > 70 ? "#81c784" : "#4caf50";
       }
     }
   </script>
